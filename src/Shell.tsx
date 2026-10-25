@@ -49,6 +49,7 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
   const [profilePopout, setProfilePopout] = useState<Profile | null>(null);
   const [showServerSettings, setShowServerSettings] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
+  const [showServerActions, setShowServerActions] = useState(false);
   const chanRef = useRef<ReturnType<typeof subscribeChannel> | null>(null);
   const lastTypingSent = useRef(0);
 
@@ -292,6 +293,11 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
             {s.name.slice(0, 2).toUpperCase()}
           </button>
         ))}
+        <div className="rail-spacer" />
+        <div className="rail-actions" aria-label="Server actions">
+          <button className="server-pill rail-action" title="Add a server" onClick={() => setShowServerActions(true)}>+</button>
+          <button className="server-pill rail-action" title="Join a server" onClick={() => setShowServerActions(true)}>↗</button>
+        </div>
       </nav>
 
       <aside className="glass side">
@@ -347,6 +353,7 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
       {showWebhooks && serverId && (
         <WebhooksPanel serverId={serverId} userId={session.userId} myPerms={myPerms} channels={channels} onClose={() => setShowWebhooks(false)} onError={setError} />
       )}
+      {showServerActions && <div className="modal-bg" onClick={() => setShowServerActions(false)}><section className="glass modal" onClick={(e) => e.stopPropagation()}><h2>Servers</h2><p className="muted">Create a new space or join one with an invite code.</p><input className="input" placeholder="New server name" value={newServer} onChange={(e) => setNewServer(e.target.value)} /><button className="btn primary" onClick={() => { void createServer(); setShowServerActions(false); }}>Create server</button><div className="modal-divider">or</div><input className="input" placeholder="Invite code" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} /><button className="btn" onClick={() => { void join(); setShowServerActions(false); }}>Join server</button><button className="btn" onClick={() => setShowServerActions(false)}>Close</button></section></div>}
       {showThemes && <div className="modal-bg" onClick={() => setShowThemes(false)}><section className="glass modal" onClick={(e) => e.stopPropagation()}><h2>Theme</h2><div className="theme-row">{THEMES.map((t) => <button key={t.id} className={`swatch ${theme === t.id ? 'active' : ''}`} style={{ background: t.swatch }} title={t.label} onClick={() => { onTheme(t.id); setShowThemes(false); }} />)}</div><button className="btn" onClick={() => setShowThemes(false)}>Close</button></section></div>}
       {showServerSettings && serverId && <div className="modal-bg" onClick={() => setShowServerSettings(false)}><section className="glass modal" onClick={(e) => e.stopPropagation()}><h2>{server?.name} settings</h2><button className="btn" onClick={() => { setShowRoles(true); setShowServerSettings(false); }}>Roles</button><button className="btn" onClick={() => { setShowWebhooks(true); setShowServerSettings(false); }}>Webhooks</button><button className="btn" onClick={() => setShowServerSettings(false)}>Close</button></section></div>}
       {profilePopout && <div className="modal-bg" onClick={() => setProfilePopout(null)}><section className="glass profile-popout" onClick={(e) => e.stopPropagation()}><div className="profile-banner" style={{ backgroundImage: profilePopout.banner_url ? `url(${profilePopout.banner_url})` : undefined }} /><div className="avatar profile-large">{profilePopout.avatar_url ? <img src={profilePopout.avatar_url} alt={`${profilePopout.nickname} avatar`} /> : profilePopout.nickname.slice(0, 1)}</div><h2>{profilePopout.nickname}</h2><p className="muted">{profilePopout.bio || 'No bio yet.'}</p><button className="btn primary" onClick={() => { setProfilePopout(null); void openDmWith(profilePopout.id); }}>Message</button></section></div>}
