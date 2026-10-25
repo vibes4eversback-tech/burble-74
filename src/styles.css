@@ -160,3 +160,10 @@ button { cursor: pointer; }
 .theme-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .swatch { width: 44px; height: 44px; border-radius: 14px; border: 2px solid transparent; }
 .swatch.active { border-color: var(--accent); }
+.avatar-button { border: 0; padding: 0; cursor: pointer; }
+.profile-popout { width: min(380px, calc(100% - 32px)); overflow: hidden; padding: 0 20px 20px; }
+.profile-banner { height: 100px; margin: 0 -20px 0; background: linear-gradient(135deg, var(--accent), var(--accent-2)); background-size: cover; }
+.profile-large { width: 84px; height: 84px; margin-top: -42px; border: 6px solid var(--glass-strong); font-size: 28px; }
+.profile-popout h2 { margin: 8px 0 0; }
+.profile-popout p { min-height: 44px; white-space: pre-wrap; }
+

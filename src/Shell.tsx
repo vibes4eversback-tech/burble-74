@@ -3,7 +3,7 @@ import * as api from './lib/api';
 import { subscribeChannel, type ChatEvent } from './lib/realtime';
 import type { Channel, Message, Profile, Server } from './lib/types';
 import type { Session } from './lib/supabase';
-import type { ThemeId } from './lib/theme';
+import { THEMES, type ThemeId } from './lib/theme';
 import { RolesPanel } from './RolesPanel';
 import { WebhooksPanel } from './WebhooksPanel';
 import { PERM, can } from './lib/types';
@@ -46,6 +46,9 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
   const [myPerms, setMyPerms] = useState(0);
   const [members, setMembers] = useState<Profile[]>([]);
   const [myProfile, setMyProfile] = useState<Profile | null>(null);
+  const [profilePopout, setProfilePopout] = useState<Profile | null>(null);
+  const [showServerSettings, setShowServerSettings] = useState(false);
+  const [showThemes, setShowThemes] = useState(false);
   const chanRef = useRef<ReturnType<typeof subscribeChannel> | null>(null);
   const lastTypingSent = useRef(0);
 
@@ -125,7 +128,7 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
   }, [serverId]);
 
   useEffect(() => {
-    if (!channelId) return;
+    if (!channelId) { setMessages([]); return; }
     let alive = true;
     Promise.resolve(api.listMessages(channelId))
       .then((m) => {
@@ -321,19 +324,18 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
           ))}
         </div>
         {!inDms && serverId && <div className="side-actions">
-          <button className="btn" onClick={() => setShowRoles(true)}>Roles</button>
-          <button className="btn" onClick={() => setShowWebhooks(true)}>Webhooks</button>
+          <button className="btn" onClick={() => setShowServerSettings(true)} disabled={!can(myPerms, PERM.MANAGE_SERVER)} title="Manage server">Server settings</button>
         </div>}
         <div className="side-spacer" />
         <div className="profile-card">
           <div className="avatar small-avatar">{myProfile?.avatar_url ? <img src={myProfile.avatar_url} alt="" /> : session.nickname.slice(0, 1).toUpperCase()}</div>
           <div className="profile-copy"><strong>{session.nickname}</strong><span className="muted">Online</span></div>
-          <label className="icon-button" title="Change avatar">Avatar<input type="file" accept="image/*" hidden onChange={(e) => {
+          <label className="icon-button" title="Change avatar">Avatar<input type="file" accept="image/*,.gif" hidden onChange={(e) => {
             const file = e.target.files?.[0];
             if (!file) return;
             void api.uploadMedia(session.userId, file).then((url) => api.updateProfile(session.userId, { avatar_url: url })).then(setMyProfile).catch((err: Error) => setError(err.message));
           }} /></label>
-          <button className="icon-button" title="Change theme" onClick={() => onTheme(theme === 'midnight' ? 'glass' : 'midnight')}>Theme</button>
+          <button className="icon-button" title="Change theme" onClick={() => setShowThemes(true)}>Theme</button>
           <button className="icon-button" title="Sign out" onClick={onSignOut}>Exit</button>
         </div>
       </aside>
@@ -343,15 +345,11 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
       )}
 
       {showWebhooks && serverId && (
-        <WebhooksPanel
-          serverId={serverId}
-          userId={session.userId}
-          myPerms={myPerms}
-          channels={channels}
-          onClose={() => setShowWebhooks(false)}
-          onError={setError}
-        />
+        <WebhooksPanel serverId={serverId} userId={session.userId} myPerms={myPerms} channels={channels} onClose={() => setShowWebhooks(false)} onError={setError} />
       )}
+      {showThemes && <div className="modal-bg" onClick={() => setShowThemes(false)}><section className="glass modal" onClick={(e) => e.stopPropagation()}><h2>Theme</h2><div className="theme-row">{THEMES.map((t) => <button key={t.id} className={`swatch ${theme === t.id ? 'active' : ''}`} style={{ background: t.swatch }} title={t.label} onClick={() => { onTheme(t.id); setShowThemes(false); }} />)}</div><button className="btn" onClick={() => setShowThemes(false)}>Close</button></section></div>}
+      {showServerSettings && serverId && <div className="modal-bg" onClick={() => setShowServerSettings(false)}><section className="glass modal" onClick={(e) => e.stopPropagation()}><h2>{server?.name} settings</h2><button className="btn" onClick={() => { setShowRoles(true); setShowServerSettings(false); }}>Roles</button><button className="btn" onClick={() => { setShowWebhooks(true); setShowServerSettings(false); }}>Webhooks</button><button className="btn" onClick={() => setShowServerSettings(false)}>Close</button></section></div>}
+      {profilePopout && <div className="modal-bg" onClick={() => setProfilePopout(null)}><section className="glass profile-popout" onClick={(e) => e.stopPropagation()}><div className="profile-banner" style={{ backgroundImage: profilePopout.banner_url ? `url(${profilePopout.banner_url})` : undefined }} /><div className="avatar profile-large">{profilePopout.avatar_url ? <img src={profilePopout.avatar_url} alt={`${profilePopout.nickname} avatar`} /> : profilePopout.nickname.slice(0, 1)}</div><h2>{profilePopout.nickname}</h2><p className="muted">{profilePopout.bio || 'No bio yet.'}</p><button className="btn primary" onClick={() => { setProfilePopout(null); void openDmWith(profilePopout.id); }}>Message</button></section></div>}
 
       <main className="glass main">
         <header className="topbar">
@@ -363,7 +361,7 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
             const who = m.author_id ? profiles[m.author_id]?.nickname ?? 'Unknown' : m.author_name ?? 'Webhook';
             return (
               <div className="msg" key={m.id}>
-                <div className="avatar">{m.author_id && profiles[m.author_id]?.avatar_url ? <img src={profiles[m.author_id].avatar_url!} alt="" /> : who.slice(0, 1).toUpperCase()}</div>
+                <button className="avatar avatar-button" onClick={() => m.author_id && profiles[m.author_id] && setProfilePopout(profiles[m.author_id])} aria-label={`View ${who}'s profile`}>{m.author_id && profiles[m.author_id]?.avatar_url ? <img src={profiles[m.author_id].avatar_url!} alt={`${who} avatar`} /> : who.slice(0, 1).toUpperCase()}</button>
                 <div>
                   <div className="msg-head">
                     <strong>{who}</strong>
@@ -404,6 +402,7 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
                 📎
                 <input
                   type="file"
+                  accept="image/*,.gif,video/*,audio/*,.pdf,.txt,.zip"
                   hidden
                   disabled={!channel}
                   onChange={(e) => setPendingFile(e.target.files?.[0] ?? null)}
@@ -432,7 +431,7 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
           <div className="members-title">Members — {members.length}</div>
           <div className="members-list">
             {members.map((member) => (
-              <button className="member-row" key={member.id} onClick={() => void openDmWith(member.id)} title={`Message ${member.nickname}`}>
+              <button className="member-row" key={member.id} onClick={() => setProfilePopout(member)} title={`View ${member.nickname}'s profile`}>
                 <div className="avatar member-avatar">{member.avatar_url ? <img src={member.avatar_url} alt="" /> : member.nickname.slice(0, 1).toUpperCase()}</div>
                 <span>{member.nickname}{member.id === server?.owner_id ? ' · owner' : ''}</span>
               </button>

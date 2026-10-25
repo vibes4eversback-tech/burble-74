@@ -172,7 +172,10 @@ export function webhookExecuteUrl(): string {
 export async function uploadMedia(userId: string, file: File): Promise<string> {
   const safe = file.name.replace(/[^A-Za-z0-9._-]/g, '_');
   const path = `${userId}/${Date.now()}-${safe}`;
-  const { error } = await supabase.storage.from('media').upload(path, file, { contentType: file.type });
+  if (file.size > 25 * 1024 * 1024) throw new Error('Files must be 25 MB or smaller');
+  const allowed = ['image/', 'video/', 'audio/', 'application/pdf', 'text/plain', 'application/zip'];
+  if (!allowed.some((type) => file.type.startsWith(type) || file.type === type) && !file.name.toLowerCase().endsWith('.gif')) throw new Error('Unsupported file type');
+  const { error } = await supabase.storage.from('media').upload(path, file, { contentType: file.type || 'image/gif' });
   if (error) throw new Error(error.message);
   return MEDIA_BASE + path;
 }
