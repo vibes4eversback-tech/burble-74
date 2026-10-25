@@ -3,7 +3,7 @@ import * as api from './lib/api';
 import { subscribeChannel, type ChatEvent } from './lib/realtime';
 import type { Channel, Message, Profile, Server } from './lib/types';
 import type { Session } from './lib/supabase';
-import { THEMES, type ThemeId } from './lib/theme';
+import type { ThemeId } from './lib/theme';
 import { RolesPanel } from './RolesPanel';
 import { WebhooksPanel } from './WebhooksPanel';
 import { PERM, can } from './lib/types';
@@ -44,6 +44,8 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
   const [showRoles, setShowRoles] = useState(false);
   const [showWebhooks, setShowWebhooks] = useState(false);
   const [myPerms, setMyPerms] = useState(0);
+  const [members, setMembers] = useState<Profile[]>([]);
+  const [myProfile, setMyProfile] = useState<Profile | null>(null);
   const chanRef = useRef<ReturnType<typeof subscribeChannel> | null>(null);
   const lastTypingSent = useRef(0);
 
@@ -95,8 +97,20 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
 
   useEffect(() => {
     reload().catch((e: Error) => setError(e.message));
+    api.getMyProfile(session.userId).then((profile) => {
+      setMyProfile(profile);
+      setProfiles((current) => ({ ...current, [profile.id]: profile }));
+    }).catch((e: Error) => setError(e.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.userId]);
+
+  useEffect(() => {
+    if (!serverId) return;
+    api.listMembers(serverId)
+      .then((rows) => api.getProfiles(rows.map((row) => row.user_id)))
+      .then(setMembers)
+      .catch((e: Error) => setError(e.message));
+  }, [serverId]);
 
   useEffect(() => {
     if (!serverId) return;
@@ -266,24 +280,23 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
   return (
     <div className="shell">
       <nav className="glass rail">
+        <button title="Direct messages" className={`server-pill dm-pill ${inDms ? 'active' : ''}`} onClick={() => { setInDms(true); setServerId(null); }}>
+          DM
+        </button>
+        <div className="rail-divider" />
         {servers.map((s) => (
-          <button
-            key={s.id}
-            title={s.name}
-            className={`server-pill ${s.id === serverId ? 'active' : ''}`}
-            onClick={() => setServerId(s.id)}
-          >
+          <button key={s.id} title={s.name} className={`server-pill ${s.id === serverId && !inDms ? 'active' : ''}`} onClick={() => { setInDms(false); setServerId(s.id); }}>
             {s.name.slice(0, 2).toUpperCase()}
           </button>
         ))}
       </nav>
 
       <aside className="glass side">
-        <strong>{server?.name ?? 'Burble'}</strong>
+        <header className="side-header"><strong>{inDms ? 'Direct messages' : server?.name ?? 'Burble'}</strong></header>
         <div className="list">
-          <button className={`side-item ${inDms ? 'active' : ''}`} onClick={() => setInDms(!inDms)}>
-            Direct messages
-          </button>
+          {inDms && (
+            <button className="side-item dm-home active" onClick={() => { setChannelId(null); setDmQuery(''); }}>Find or start a conversation</button>
+          )}
           {inDms && (
             <>
               <input className="input" placeholder="Find a nickname" value={dmQuery} onChange={(e) => {
@@ -307,38 +320,22 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
             </button>
           ))}
         </div>
-        {serverId && <button className="btn" onClick={() => setShowRoles(true)}>Roles</button>}
-        {serverId && <button className="btn" onClick={() => setShowWebhooks(true)}>Webhooks</button>}
-        <input className="input" placeholder="New server name" value={newServer} onChange={(e) => setNewServer(e.target.value)} />
-        <button className="btn" onClick={createServer}>Create server</button>
-        <input className="input" placeholder="Invite code" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} />
-        <button className="btn" onClick={join}>Join server</button>
-        <div className="theme-row" aria-label="Theme">
-          {THEMES.map((t) => (
-            <button key={t.id} title={t.label} className={`swatch ${t.id === theme ? 'active' : ''}`} style={{ background: t.swatch }} onClick={() => onTheme(t.id)} />
-          ))}
+        {!inDms && serverId && <div className="side-actions">
+          <button className="btn" onClick={() => setShowRoles(true)}>Roles</button>
+          <button className="btn" onClick={() => setShowWebhooks(true)}>Webhooks</button>
+        </div>}
+        <div className="side-spacer" />
+        <div className="profile-card">
+          <div className="avatar small-avatar">{myProfile?.avatar_url ? <img src={myProfile.avatar_url} alt="" /> : session.nickname.slice(0, 1).toUpperCase()}</div>
+          <div className="profile-copy"><strong>{session.nickname}</strong><span className="muted">Online</span></div>
+          <label className="icon-button" title="Change avatar">Avatar<input type="file" accept="image/*" hidden onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            void api.uploadMedia(session.userId, file).then((url) => api.updateProfile(session.userId, { avatar_url: url })).then(setMyProfile).catch((err: Error) => setError(err.message));
+          }} /></label>
+          <button className="icon-button" title="Change theme" onClick={() => onTheme(theme === 'midnight' ? 'glass' : 'midnight')}>Theme</button>
+          <button className="icon-button" title="Sign out" onClick={onSignOut}>Exit</button>
         </div>
-        <label className="btn">
-          Change avatar
-          <input
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              void api
-                .uploadMedia(session.userId, file)
-                .then((url) => api.updateProfile(session.userId, { avatar_url: url }))
-                .then(() => setProfiles((p) => {
-                  const { [session.userId]: _old, ...rest } = p;
-                  return rest;
-                }))
-                .catch((err: Error) => setError(err.message));
-            }}
-          />
-        </label>
-        <button className="btn" onClick={onSignOut}>Sign out {session.nickname}</button>
       </aside>
 
       {showRoles && serverId && (
@@ -366,7 +363,7 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
             const who = m.author_id ? profiles[m.author_id]?.nickname ?? 'Unknown' : m.author_name ?? 'Webhook';
             return (
               <div className="msg" key={m.id}>
-                <div className="avatar">{who.slice(0, 1).toUpperCase()}</div>
+                <div className="avatar">{m.author_id && profiles[m.author_id]?.avatar_url ? <img src={profiles[m.author_id].avatar_url!} alt="" /> : who.slice(0, 1).toUpperCase()}</div>
                 <div>
                   <div className="msg-head">
                     <strong>{who}</strong>
@@ -430,6 +427,20 @@ export function Shell({ session, theme, onTheme, onSignOut }: Props) {
           </div>
         </div>
       </main>
+      {!inDms && serverId && (
+        <aside className="glass members-panel">
+          <div className="members-title">Members — {members.length}</div>
+          <div className="members-list">
+            {members.map((member) => (
+              <button className="member-row" key={member.id} onClick={() => void openDmWith(member.id)} title={`Message ${member.nickname}`}>
+                <div className="avatar member-avatar">{member.avatar_url ? <img src={member.avatar_url} alt="" /> : member.nickname.slice(0, 1).toUpperCase()}</div>
+                <span>{member.nickname}{member.id === server?.owner_id ? ' · owner' : ''}</span>
+              </button>
+            ))}
+          </div>
+          {server?.invite_code && <button className="invite-button" onClick={() => navigator.clipboard?.writeText(server.invite_code)}>Copy invite code</button>}
+        </aside>
+      )}
     </div>
   );
 }
